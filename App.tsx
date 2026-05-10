@@ -1,13 +1,13 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, {useEffect, useMemo, useState} from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
-  useColorScheme,
   useWindowDimensions,
   View,
 } from 'react-native';
@@ -38,6 +38,7 @@ type Occasion =
   | 'sheva_berachot';
 type FontScale = 'compact' | 'comfortable' | 'large';
 type Participants = '1' | '3' | '10';
+type AppScreen = 'home' | 'reader';
 
 type Preferences = {
   language: Language;
@@ -74,7 +75,7 @@ type PrayerSection = {
   intro?: string;
   text?: string;
   content?: ContentLine[];
-  variants?: Partial<Record<Occasion, {title: string; text: string}>>;
+  variants?: Partial<Record<Occasion, { title: string; text: string }>>;
   items?: DynamicItem[] | Partial<Record<Occasion, string>>;
 };
 
@@ -89,10 +90,12 @@ type PrayerVersion = {
 };
 
 const PREFERENCES_KEY = '@bentchapp/preferences';
+const SPLASH_LOGO = require('./src/assets/splash_bentchapp.png');
+const HEADER_LOGO = require('./src/assets/logo_inner.png');
 
 const DEFAULT_PREFERENCES: Preferences = {
   language: 'hebrew',
-  nusach: 'Ashkenazi',
+  nusach: 'Sephardi',
   occasion: 'weekday',
   fontScale: 'comfortable',
   participants: '1',
@@ -111,37 +114,52 @@ const FONT_LABELS: Record<FontScale, string> = {
   large: 'Large',
 };
 
-const LANGUAGES: Array<{value: Language; label: string}> = [
-  {value: 'hebrew', label: 'Hebrew'},
+const LANGUAGES: Array<{ value: Language; label: string }> = [
+  { value: 'hebrew', label: 'Hebrew' },
 ];
 
-const NUSACHIM: Array<{value: Nusach; label: string}> = [
-  {value: 'Ashkenazi', label: 'Ashkenazi'},
-  {value: 'Sephardi', label: 'Sephardi'},
+const NUSACHIM: Array<{ value: Nusach; label: string }> = [
+  { value: 'Ashkenazi', label: 'Ashkenazi' },
+  { value: 'Sephardi', label: 'Sephardi' },
 ];
 
-const OCCASIONS: Array<{value: Occasion; label: string}> = [
-  {value: 'weekday', label: 'Weekday'},
-  {value: 'shabbat', label: 'Shabbat'},
-  {value: 'yom_tov', label: 'Yom Tov'},
-  {value: 'rosh_chodesh', label: 'Rosh Chodesh'},
-  {value: 'chanukah', label: 'Chanukah'},
-  {value: 'purim', label: 'Purim'},
-  {value: 'chol_hamoed_pesach', label: 'Chol Hamoed Pesach'},
-  {value: 'chol_hamoed_sukkot', label: 'Chol Hamoed Sukkot'},
-  {value: 'pesach', label: 'Pesach'},
-  {value: 'sukkot', label: 'Sukkot'},
-  {value: 'shemini_atzeret', label: 'Shemini Atzeret'},
-  {value: 'shavuot', label: 'Shavuot'},
-  {value: 'rosh_hashanah', label: 'Rosh Hashanah'},
-  {value: 'bris', label: 'Bris'},
-  {value: 'sheva_berachot', label: 'Sheva Berachot'},
+const OCCASIONS: Array<{ value: Occasion; label: string }> = [
+  { value: 'weekday', label: 'Weekday' },
+  { value: 'shabbat', label: 'Shabbat' },
+  { value: 'yom_tov', label: 'Yom Tov' },
+  { value: 'rosh_chodesh', label: 'Rosh Chodesh' },
+  { value: 'chanukah', label: 'Chanukah' },
+  { value: 'purim', label: 'Purim' },
+  { value: 'chol_hamoed_pesach', label: 'Chol Hamoed Pesach' },
+  { value: 'chol_hamoed_sukkot', label: 'Chol Hamoed Sukkot' },
+  { value: 'pesach', label: 'Pesach' },
+  { value: 'sukkot', label: 'Sukkot' },
+  { value: 'shemini_atzeret', label: 'Shemini Atzeret' },
+  { value: 'shavuot', label: 'Shavuot' },
+  { value: 'rosh_hashanah', label: 'Rosh Hashanah' },
+  { value: 'bris', label: 'Bris' },
+  { value: 'sheva_berachot', label: 'Sheva Berachot' },
 ];
 
-const PARTICIPANT_OPTIONS: Array<{value: Participants; label: string}> = [
-  {value: '1', label: '1-2'},
-  {value: '3', label: '3+'},
-  {value: '10', label: '10+'},
+const PARTICIPANT_OPTIONS: Array<{ value: Participants; label: string }> = [
+  { value: '1', label: '1-2' },
+  { value: '3', label: '3+' },
+  { value: '10', label: '10+' },
+];
+
+const QUICK_ACCESS = [
+  { title: 'Al Hamichya', icon: '♪' },
+  { title: 'Boreh Nefashot', icon: '●' },
+  { title: 'Tefilat Haderech', icon: '⌂' },
+  { title: 'Asher Yatzar', icon: '♥' },
+];
+
+const NAV_ITEMS = [
+  { screen: 'home' as AppScreen, title: 'Home', icon: '⌂' },
+  { screen: 'reader' as AppScreen, title: 'Reader', icon: '▤' },
+  { screen: 'home' as AppScreen, title: 'Audio', icon: '◉' },
+  { screen: 'home' as AppScreen, title: 'Bookmarks', icon: '□' },
+  { screen: 'home' as AppScreen, title: 'More', icon: '…' },
 ];
 
 const typedPrayerData = prayerData as {
@@ -149,11 +167,9 @@ const typedPrayerData = prayerData as {
 };
 
 function App() {
-  const isDarkMode = useColorScheme() === 'dark';
-
   return (
     <SafeAreaProvider>
-      <StatusBar barStyle={isDarkMode ? 'light-content' : 'dark-content'} />
+      <StatusBar barStyle="dark-content" backgroundColor="#fffaf2" />
       <BentchApp />
     </SafeAreaProvider>
   );
@@ -163,6 +179,7 @@ function BentchApp() {
   const [preferences, setPreferences] =
     useState<Preferences>(DEFAULT_PREFERENCES);
   const [isReady, setIsReady] = useState(false);
+  const [screen, setScreen] = useState<AppScreen>('home');
 
   useEffect(() => {
     let isMounted = true;
@@ -199,8 +216,23 @@ function BentchApp() {
     return <SplashScreen />;
   }
 
+  if (screen === 'reader') {
+    return (
+      <ReaderScreen
+        preferences={preferences}
+        setPreferences={setPreferences}
+        onBack={() => setScreen('home')}
+      />
+    );
+  }
+
   return (
-    <ReaderScreen preferences={preferences} setPreferences={setPreferences} />
+    <HomeScreen
+      preferences={preferences}
+      setPreferences={setPreferences}
+      onStart={() => setScreen('reader')}
+      onNavigate={setScreen}
+    />
   );
 }
 
@@ -227,27 +259,232 @@ async function loadPreferences(): Promise<Preferences> {
 
 function SplashScreen() {
   const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const logoWidth = Math.min(width * 0.78, 430);
 
   return (
-    <View style={[styles.splash, {paddingTop: insets.top + 24}]}>
-      <View style={styles.splashMark}>
-        <Text style={styles.splashHebrew}>ברכת המזון</Text>
-        <Text style={styles.splashTitle}>Bentch</Text>
+    <View style={styles.splash}>
+      <View style={[styles.splashContent, { paddingTop: insets.top + 24 }]}>
+        <Image
+          accessibilityLabel="Bentch"
+          resizeMode="contain"
+          source={SPLASH_LOGO}
+          style={[styles.splashLogo, { width: logoWidth }]}
+        />
       </View>
-      <ActivityIndicator color="#f8f0df" size="large" />
+
+      <View style={styles.splashWave}>
+        <View style={styles.splashWaveCutout} />
+        <View style={styles.splashGoldCurve} />
+        <View style={styles.splashLoading}>
+          <ActivityIndicator color="#d8ad58" size="large" />
+          <Text style={styles.splashLoadingText}>Loading...</Text>
+        </View>
+      </View>
     </View>
+  );
+}
+
+function HomeScreen({
+  preferences,
+  setPreferences,
+  onStart,
+  onNavigate,
+}: {
+  preferences: Preferences;
+  setPreferences: React.Dispatch<React.SetStateAction<Preferences>>;
+  onStart: () => void;
+  onNavigate: (screen: AppScreen) => void;
+}) {
+  const insets = useSafeAreaInsets();
+
+  return (
+    <SafeAreaView style={styles.homeScreen}>
+      <ScrollView
+        style={styles.homeScroll}
+        contentContainerStyle={[
+          styles.homeContent,
+          { paddingBottom: insets.bottom + 126 },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.homeTop}>
+          <Image
+            accessibilityLabel="BentchApp"
+            resizeMode="contain"
+            source={HEADER_LOGO}
+            style={styles.homeLogo}
+          />
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.settingsButton,
+              pressed && styles.softPressed,
+            ]}
+          >
+            <Text style={styles.settingsIcon}>⚙</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.homeCard}>
+          <Text style={styles.homeCardTitle}>Choose Nusach</Text>
+          <Text style={styles.homeCardSubtitle}>Your selection is saved</Text>
+
+          <View style={styles.nusachGrid}>
+            {NUSACHIM.slice()
+              .reverse()
+              .map(option => (
+                <NusachCard
+                  key={option.value}
+                  label={option.label}
+                  selected={preferences.nusach === option.value}
+                  onPress={() =>
+                    setPreferences(current => ({
+                      ...current,
+                      nusach: option.value,
+                    }))
+                  }
+                />
+              ))}
+          </View>
+
+          <Pressable
+            accessibilityRole="button"
+            onPress={onStart}
+            style={({ pressed }) => [
+              styles.startButton,
+              pressed && styles.startButtonPressed,
+            ]}
+          >
+            <Text style={styles.startIcon}>▰</Text>
+            <Text style={styles.startText}>Start Birkat Hamazon</Text>
+            <Text style={styles.startArrow}>›</Text>
+          </Pressable>
+          <Text style={styles.savedHint}>
+            Continue with your saved settings
+          </Text>
+
+          <Text style={styles.quickTitle}>Quick Access</Text>
+          <View style={styles.quickGrid}>
+            {QUICK_ACCESS.map(item => (
+              <Pressable
+                accessibilityRole="button"
+                key={item.title}
+                style={({ pressed }) => [
+                  styles.quickTile,
+                  pressed && styles.softPressed,
+                ]}
+              >
+                <View style={styles.quickIconCircle}>
+                  <Text style={styles.quickIcon}>{item.icon}</Text>
+                </View>
+                <Text style={styles.quickText}>{item.title}</Text>
+                <View style={styles.quickUnderline} />
+              </Pressable>
+            ))}
+          </View>
+        </View>
+
+        <View style={styles.greetingCard}>
+          <View style={styles.greetingIconCircle}>
+            <Text style={styles.greetingIcon}>▣</Text>
+          </View>
+          <View style={styles.greetingCopy}>
+            <Text style={styles.greetingTitle}>Good morning! ☼</Text>
+            <Text style={styles.greetingText}>
+              Have a great day and a meaningful bench.
+            </Text>
+          </View>
+        </View>
+      </ScrollView>
+
+      <View style={[styles.bottomNav, { bottom: insets.bottom + 16 }]}>
+        {NAV_ITEMS.map(item => {
+          const isActive = item.screen === 'home' && item.title === 'Home';
+          return (
+            <Pressable
+              accessibilityRole="button"
+              key={item.title}
+              onPress={() => {
+                if (item.screen === 'reader') {
+                  onStart();
+                } else {
+                  onNavigate(item.screen);
+                }
+              }}
+              style={styles.navItem}
+            >
+              <Text style={[styles.navIcon, isActive && styles.navIconActive]}>
+                {item.icon}
+              </Text>
+              <Text style={[styles.navText, isActive && styles.navTextActive]}>
+                {item.title}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </SafeAreaView>
+  );
+}
+
+function NusachCard({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  const isSephardi = label === 'Sephardi';
+
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.nusachCard,
+        selected && styles.nusachCardSelected,
+        pressed && styles.softPressed,
+      ]}
+    >
+      {selected && (
+        <View style={styles.checkBadge}>
+          <Text style={styles.checkText}>✓</Text>
+        </View>
+      )}
+      <View
+        style={[styles.nusachIconCircle, selected && styles.nusachIconSelected]}
+      >
+        <Text style={[styles.nusachIcon, selected && styles.nusachIconActive]}>
+          {isSephardi ? '⌂' : '✡'}
+        </Text>
+      </View>
+      <Text style={styles.nusachLabel}>{label}</Text>
+      <View
+        style={[
+          styles.nusachUnderline,
+          selected && styles.nusachUnderlineActive,
+        ]}
+      />
+    </Pressable>
   );
 }
 
 function ReaderScreen({
   preferences,
   setPreferences,
+  onBack,
 }: {
   preferences: Preferences;
   setPreferences: React.Dispatch<React.SetStateAction<Preferences>>;
+  onBack: () => void;
 }) {
-  const {width} = useWindowDimensions();
-  const isWide = width >= 720;
+  const { width } = useWindowDimensions();
+  const scale = Math.min(Math.max(width / 393, 0.86), 1.28);
+  const horizontalPadding = Math.max(18, width * 0.036);
+  const selectedOccasion = getSelectedLabel(OCCASIONS, preferences.occasion);
   const selectedVersion = useMemo(
     () =>
       typedPrayerData.versions.find(
@@ -262,114 +499,245 @@ function ReaderScreen({
       ),
     [preferences, selectedVersion],
   );
-  const textAlign = 'right';
-  const writingDirection = 'rtl';
-  const fontSize = FONT_SIZES[preferences.fontScale];
+  const currentSection =
+    visibleSections.find(section => section.id === 'birkat_hazan') ??
+    visibleSections[0];
+  const currentLines = currentSection
+    ? getSectionLines(currentSection, preferences)
+    : [];
+  const hebrewText = currentLines.map(line => line.text).join(' ');
+  const progressWidth = `${100 / Math.max(visibleSections.length, 1)}%`;
 
   return (
-    <SafeAreaView style={styles.screen}>
-      <View style={[styles.layout, isWide && styles.layoutWide]}>
-        <View style={[styles.controls, isWide && styles.controlsWide]}>
-          <Text style={styles.appTitle}>Bentch</Text>
-          <Text style={styles.appSubtitle}>Birkat Hamazon</Text>
-
-          <ControlGroup title="Language">
-            <SegmentedControl
-              options={LANGUAGES}
-              value={preferences.language}
-              onChange={language =>
-                setPreferences(current => ({...current, language}))
-              }
-            />
-          </ControlGroup>
-
-          <ControlGroup title="Nusach">
-            <SegmentedControl
-              options={NUSACHIM}
-              value={preferences.nusach}
-              onChange={nusach =>
-                setPreferences(current => ({...current, nusach}))
-              }
-            />
-          </ControlGroup>
-
-          <ControlGroup title="Occasion">
-            <SegmentedControl
-              options={OCCASIONS.filter(option =>
-                selectedVersion.supported_occasions.includes(option.value),
-              )}
-              value={preferences.occasion}
-              onChange={occasion =>
-                setPreferences(current => ({...current, occasion}))
-              }
-            />
-          </ControlGroup>
-
-          <ControlGroup title="Text Size">
-            <SegmentedControl
-              options={Object.keys(FONT_LABELS).map(value => ({
-                value: value as FontScale,
-                label: FONT_LABELS[value as FontScale],
-              }))}
-              value={preferences.fontScale}
-              onChange={fontScale =>
-                setPreferences(current => ({...current, fontScale}))
-              }
-            />
-          </ControlGroup>
-
-          <ControlGroup title="Participants">
-            <SegmentedControl
-              options={PARTICIPANT_OPTIONS}
-              value={preferences.participants}
-              onChange={participants =>
-                setPreferences(current => ({...current, participants}))
-              }
-            />
-          </ControlGroup>
-
-          <ControlGroup title="Hosted Meal">
-            <SegmentedControl
-              options={[
-                {value: 'false', label: 'No'},
-                {value: 'true', label: 'Yes'},
-              ]}
-              value={String(preferences.hostedMeal)}
-              onChange={hostedMeal =>
-                setPreferences(current => ({
-                  ...current,
-                  hostedMeal: hostedMeal === 'true',
-                }))
-              }
-            />
-          </ControlGroup>
+    <SafeAreaView style={styles.readerScreen}>
+      <ScrollView
+        style={styles.reader}
+        contentContainerStyle={[
+          styles.readerPageContent,
+          {
+            paddingHorizontal: horizontalPadding,
+            paddingBottom: 26 * scale,
+          },
+        ]}
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.readerTopBar}>
+          <Pressable
+            accessibilityRole="button"
+            onPress={onBack}
+            style={({ pressed }) => [
+              styles.readerCircleButton,
+              {
+                borderRadius: 24 * scale,
+                height: 48 * scale,
+                width: 48 * scale,
+              },
+              pressed && styles.softPressed,
+            ]}
+          >
+            <Text style={[styles.readerCircleIcon, { fontSize: 30 * scale }]}>
+              ‹
+            </Text>
+          </Pressable>
+          <Text style={[styles.readerHeaderTitle, { fontSize: 25 * scale }]}>
+            Birkat Hamazon
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            style={({ pressed }) => [
+              styles.readerCircleButton,
+              {
+                borderRadius: 24 * scale,
+                height: 48 * scale,
+                width: 48 * scale,
+              },
+              pressed && styles.softPressed,
+            ]}
+          >
+            <Text style={[styles.readerBookmarkIcon, { fontSize: 26 * scale }]}>
+              ♡
+            </Text>
+          </Pressable>
         </View>
 
-        <ScrollView
-          style={styles.reader}
-          contentContainerStyle={styles.readerContent}
-          showsVerticalScrollIndicator={false}>
-          <Text style={[styles.readerKicker, {textAlign}]}>
-            {selectedVersion.nusach} ·{' '}
-            {getSelectedLabel(OCCASIONS, preferences.occasion)}
-          </Text>
-          <Text style={[styles.readerTitle, {textAlign, writingDirection}]}>
-            ברכת המזון
-          </Text>
+        <View style={[styles.readerFilterRow, { gap: 16 * scale }]}>
+          <ReaderPill
+            icon="⌂"
+            label="Nusach"
+            scale={scale}
+            value={preferences.nusach}
+            onPress={() =>
+              setPreferences(current => ({
+                ...current,
+                nusach:
+                  current.nusach === 'Sephardi' ? 'Ashkenazi' : 'Sephardi',
+              }))
+            }
+          />
+          <ReaderPill
+            icon="▣"
+            label="Occasion"
+            scale={scale}
+            value={selectedOccasion}
+            onPress={() =>
+              setPreferences(current => ({
+                ...current,
+                occasion: current.occasion === 'weekday' ? 'shabbat' : 'weekday',
+              }))
+            }
+          />
+        </View>
 
-          {visibleSections.map(section => (
-            <PrayerSectionView
-              key={section.id}
-              section={section}
-              preferences={preferences}
-              fontSize={fontSize}
-              textAlign={textAlign}
-              writingDirection={writingDirection}
-            />
+        <View style={styles.readerTabs}>
+          {['Hebrew', 'Transliteration', 'English'].map((tab, index) => (
+            <View key={tab} style={styles.readerTab}>
+              <Text
+                style={[
+                  styles.readerTabText,
+                  index === 0 && styles.readerTabTextActive,
+                  { fontSize: 18 * scale },
+                ]}
+              >
+                {tab}
+              </Text>
+              {index === 0 && <View style={styles.readerTabUnderline} />}
+            </View>
           ))}
-        </ScrollView>
-      </View>
+        </View>
+
+        <View
+          style={[
+            styles.prayerReaderCard,
+            {
+              borderRadius: 18 * scale,
+              minHeight: 460 * scale,
+              paddingTop: 34 * scale,
+            },
+          ]}
+        >
+          <Text style={[styles.prayerEyebrow, { fontSize: 17 * scale }]}>
+            {currentSection?.title ?? 'ברכת הזן'}
+          </Text>
+          <Text
+            style={[
+              styles.readerHebrewText,
+              {
+                fontSize: 37 * scale,
+                lineHeight: 58 * scale,
+              },
+            ]}
+          >
+            {hebrewText}
+          </Text>
+          <View style={styles.readerProgressFooter}>
+            <Text style={[styles.readerProgressCount, { fontSize: 16 * scale }]}>
+              1 / {Math.max(visibleSections.length, 1)}
+            </Text>
+            <Text style={[styles.readerProgressTitle, { fontSize: 16 * scale }]}>
+              Intro
+            </Text>
+            <Text style={[styles.readerProgressArrow, { fontSize: 28 * scale }]}>
+              →
+            </Text>
+          </View>
+          <View style={styles.readerProgressTrack}>
+            <View style={[styles.readerProgressFill, { width: progressWidth }]} />
+          </View>
+        </View>
+
+        <View
+          style={[
+            styles.translationCard,
+            { borderRadius: 18 * scale, padding: 20 * scale },
+          ]}
+        >
+          <Text
+            style={[
+              styles.translationText,
+              { fontSize: 18 * scale, lineHeight: 28 * scale },
+            ]}
+          >
+            Baruch Atah Adonai, our God, King of the universe, who sustains the
+            world with goodness, with kindness, with compassion. He provides
+            food for all the world with His great goodness, always and forever.
+          </Text>
+          <Text style={[styles.translationIcon, { fontSize: 36 * scale }]}>▤</Text>
+        </View>
+
+        <View style={[styles.readerToolBar, { borderRadius: 18 * scale }]}>
+          {[
+            ['Aא', 'Text Size'],
+            ['☼', 'Light Mode'],
+            ['אבג', 'Transliteration'],
+            ['▤', 'English'],
+            ['♡', 'Bookmark'],
+          ].map(([icon, label], index) => (
+            <Pressable
+              accessibilityRole="button"
+              key={label}
+              style={({ pressed }) => [
+                styles.readerTool,
+                pressed && styles.softPressed,
+              ]}
+            >
+              <Text
+                style={[
+                  styles.readerToolIcon,
+                  index === 0 && styles.readerToolIconActive,
+                  { fontSize: 26 * scale },
+                ]}
+              >
+                {icon}
+              </Text>
+              <Text style={[styles.readerToolText, { fontSize: 12 * scale }]}>
+                {label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
     </SafeAreaView>
+  );
+}
+
+function ReaderPill({
+  icon,
+  label,
+  value,
+  scale,
+  onPress,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  scale: number;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      accessibilityRole="button"
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.readerPill,
+        {
+          borderRadius: 18 * scale,
+          minHeight: 56 * scale,
+          paddingHorizontal: 16 * scale,
+        },
+        pressed && styles.softPressed,
+      ]}
+    >
+      <Text style={[styles.readerPillIcon, { fontSize: 30 * scale }]}>{icon}</Text>
+      <View style={styles.readerPillCopy}>
+        <Text style={[styles.readerPillLabel, { fontSize: 13 * scale }]}>
+          {label}
+        </Text>
+        <Text style={[styles.readerPillValue, { fontSize: 17 * scale }]}>
+          {value}
+        </Text>
+      </View>
+      <Text style={[styles.readerPillChevron, { fontSize: 24 * scale }]}>⌄</Text>
+    </Pressable>
   );
 }
 
@@ -393,7 +761,7 @@ function SegmentedControl<T extends string>({
   value,
   onChange,
 }: {
-  options: Array<{value: T; label: string}>;
+  options: Array<{ value: T; label: string }>;
   value: T;
   onChange: (value: T) => void;
 }) {
@@ -405,16 +773,18 @@ function SegmentedControl<T extends string>({
           <Pressable
             key={option.value}
             onPress={() => onChange(option.value)}
-            style={({pressed}) => [
+            style={({ pressed }) => [
               styles.segment,
               isSelected && styles.segmentSelected,
               pressed && styles.segmentPressed,
-            ]}>
+            ]}
+          >
             <Text
               style={[
                 styles.segmentText,
                 isSelected && styles.segmentTextSelected,
-              ]}>
+              ]}
+            >
               {option.label}
             </Text>
           </Pressable>
@@ -448,8 +818,9 @@ function PrayerSectionView({
       style={[
         styles.prayerSection,
         section.type === 'conditional' && styles.additionSection,
-      ]}>
-      <Text style={[styles.sectionTitle, {textAlign, writingDirection}]}>
+      ]}
+    >
+      <Text style={[styles.sectionTitle, { textAlign, writingDirection }]}>
         {section.title}
       </Text>
       {lines.map(line => (
@@ -458,9 +829,10 @@ function PrayerSectionView({
           style={[
             styles.prayerText,
             line.role && styles.roleText,
-            {fontSize, lineHeight: Math.round(fontSize * 1.72), textAlign},
-            {writingDirection},
-          ]}>
+            { fontSize, lineHeight: Math.round(fontSize * 1.72), textAlign },
+            { writingDirection },
+          ]}
+        >
           {line.role ? `${getRoleLabel(line.role)}: ` : ''}
           {line.text}
         </Text>
@@ -470,15 +842,15 @@ function PrayerSectionView({
 }
 
 function getSectionLines(section: PrayerSection, preferences: Preferences) {
-  const lines: Array<{id: string; text: string; role?: 'leader' | 'group'}> =
+  const lines: Array<{ id: string; text: string; role?: 'leader' | 'group' }> =
     [];
 
   if (section.intro) {
-    lines.push({id: `${section.id}-intro`, text: section.intro});
+    lines.push({ id: `${section.id}-intro`, text: section.intro });
   }
 
   if (section.text) {
-    lines.push({id: `${section.id}-text`, text: section.text});
+    lines.push({ id: `${section.id}-text`, text: section.text });
   }
 
   section.content?.forEach((line, index) => {
@@ -497,10 +869,14 @@ function getSectionLines(section: PrayerSection, preferences: Preferences) {
     });
   }
 
-  if (section.type === 'mapping' && section.items && !Array.isArray(section.items)) {
+  if (
+    section.type === 'mapping' &&
+    section.items &&
+    !Array.isArray(section.items)
+  ) {
     const label = section.items[preferences.occasion];
     if (label) {
-      lines.push({id: `${section.id}-mapping`, text: label});
+      lines.push({ id: `${section.id}-mapping`, text: label });
     }
   }
 
@@ -508,7 +884,7 @@ function getSectionLines(section: PrayerSection, preferences: Preferences) {
     section.items
       .filter(item => shouldShow(item.show_if, preferences))
       .forEach(item => {
-        lines.push({id: item.id, text: item.text});
+        lines.push({ id: item.id, text: item.text });
       });
   }
 
@@ -546,7 +922,7 @@ function getRoleLabel(role: 'leader' | 'group') {
 }
 
 function getSelectedLabel<T extends string>(
-  options: Array<{value: T; label: string}>,
+  options: Array<{ value: T; label: string }>,
   value: T,
 ) {
   return options.find(option => option.value === value)?.label ?? value;
@@ -559,28 +935,386 @@ const styles = StyleSheet.create({
   },
   splash: {
     alignItems: 'center',
-    backgroundColor: '#183d36',
+    backgroundColor: '#fffaf2',
+    flex: 1,
+    overflow: 'hidden',
+  },
+  splashContent: {
+    alignItems: 'center',
     flex: 1,
     justifyContent: 'center',
-    padding: 32,
+    paddingHorizontal: 24,
+    paddingBottom: 170,
   },
-  splashMark: {
+  splashLogo: {
+    aspectRatio: 1024 / 843,
+    maxWidth: '92%',
+  },
+  splashWave: {
     alignItems: 'center',
-    marginBottom: 48,
+    backgroundColor: '#142c49',
+    bottom: 0,
+    height: '31%',
+    justifyContent: 'center',
+    left: 0,
+    overflow: 'hidden',
+    position: 'absolute',
+    right: 0,
   },
-  splashHebrew: {
-    color: '#f8f0df',
-    fontSize: 36,
+  splashWaveCutout: {
+    backgroundColor: '#fffaf2',
+    borderBottomLeftRadius: 420,
+    borderBottomRightRadius: 420,
+    height: 170,
+    left: -64,
+    position: 'absolute',
+    right: -64,
+    top: -136,
+    transform: [{ rotate: '7deg' }],
+  },
+  splashGoldCurve: {
+    borderColor: '#d7a74f',
+    borderRadius: 420,
+    borderTopWidth: 1,
+    height: 148,
+    left: -52,
+    position: 'absolute',
+    right: -52,
+    top: -32,
+    transform: [{ rotate: '7deg' }],
+  },
+  splashLoading: {
+    alignItems: 'center',
+    gap: 18,
+    marginTop: 42,
+  },
+  splashLoadingText: {
+    color: '#fffaf2',
+    fontSize: 21,
+    fontWeight: '500',
+    letterSpacing: 1,
+  },
+  homeScreen: {
+    backgroundColor: '#fffaf2',
+    flex: 1,
+  },
+  homeScroll: {
+    flex: 1,
+  },
+  homeContent: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+  },
+  homeTop: {
+    alignItems: 'flex-start',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+  },
+  homeLogo: {
+    aspectRatio: 1326 / 529,
+    height: 150,
+    marginLeft: -16,
+    maxWidth: '82%',
+  },
+  settingsButton: {
+    alignItems: 'center',
+    backgroundColor: '#fffdf8',
+    borderColor: '#eadfce',
+    borderRadius: 28,
+    borderWidth: 1,
+    height: 56,
+    justifyContent: 'center',
+    shadowColor: '#122845',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    width: 56,
+  },
+  settingsIcon: {
+    color: '#102846',
+    fontSize: 28,
     fontWeight: '700',
-    marginBottom: 10,
+  },
+  homeCard: {
+    backgroundColor: '#fffdf8',
+    borderColor: '#eadfce',
+    borderRadius: 28,
+    borderWidth: 1,
+    padding: 24,
+    shadowColor: '#122845',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.08,
+    shadowRadius: 22,
+  },
+  homeCardTitle: {
+    color: '#102846',
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: 0,
+  },
+  homeCardSubtitle: {
+    color: '#6d7480',
+    fontSize: 18,
+    fontWeight: '600',
+    marginTop: 12,
+  },
+  nusachGrid: {
+    flexDirection: 'row',
+    gap: 18,
+    marginTop: 28,
+  },
+  nusachCard: {
+    alignItems: 'center',
+    backgroundColor: '#fffdf8',
+    borderColor: '#e9e1d6',
+    borderRadius: 22,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 210,
+    justifyContent: 'center',
+    padding: 16,
+    shadowColor: '#122845',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+  },
+  nusachCardSelected: {
+    backgroundColor: '#fff8ea',
+    borderColor: '#d5a044',
+  },
+  checkBadge: {
+    alignItems: 'center',
+    backgroundColor: '#d6a247',
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    position: 'absolute',
+    right: 18,
+    top: 18,
+    width: 40,
+  },
+  checkText: {
+    color: '#fffdf8',
+    fontSize: 26,
+    fontWeight: '800',
+    marginTop: -2,
+  },
+  nusachIconCircle: {
+    alignItems: 'center',
+    backgroundColor: '#f2eee7',
+    borderRadius: 56,
+    height: 112,
+    justifyContent: 'center',
+    marginBottom: 18,
+    width: 112,
+  },
+  nusachIconSelected: {
+    backgroundColor: '#f8e7c9',
+  },
+  nusachIcon: {
+    color: '#102846',
+    fontSize: 44,
+    fontWeight: '800',
+  },
+  nusachIconActive: {
+    color: '#d6a247',
+  },
+  nusachLabel: {
+    color: '#102846',
+    fontSize: 28,
+    fontWeight: '800',
     textAlign: 'center',
   },
-  splashTitle: {
-    color: '#d9b66d',
+  nusachUnderline: {
+    backgroundColor: '#d7d2ca',
+    borderRadius: 2,
+    height: 4,
+    marginTop: 18,
+    width: 52,
+  },
+  nusachUnderlineActive: {
+    backgroundColor: '#d6a247',
+  },
+  startButton: {
+    alignItems: 'center',
+    backgroundColor: '#102846',
+    borderRadius: 18,
+    flexDirection: 'row',
+    gap: 18,
+    justifyContent: 'center',
+    marginTop: 30,
+    minHeight: 86,
+    paddingHorizontal: 24,
+    shadowColor: '#102846',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.22,
+    shadowRadius: 16,
+  },
+  startButtonPressed: {
+    opacity: 0.9,
+    transform: [{ scale: 0.99 }],
+  },
+  startIcon: {
+    color: '#f0be64',
+    fontSize: 34,
+  },
+  startText: {
+    color: '#fffdf8',
+    flex: 1,
+    fontSize: 27,
+    fontWeight: '800',
+    textAlign: 'center',
+  },
+  startArrow: {
+    color: '#fffdf8',
+    fontSize: 44,
+    fontWeight: '300',
+    marginTop: -4,
+  },
+  savedHint: {
+    color: '#6d7480',
     fontSize: 17,
+    fontWeight: '600',
+    marginTop: 18,
+    textAlign: 'center',
+  },
+  quickTitle: {
+    color: '#102846',
+    fontSize: 24,
+    fontWeight: '800',
+    marginTop: 34,
+  },
+  quickGrid: {
+    flexDirection: 'row',
+    gap: 14,
+    marginTop: 18,
+  },
+  quickTile: {
+    alignItems: 'center',
+    backgroundColor: '#fffdf8',
+    borderColor: '#eadfce',
+    borderRadius: 18,
+    borderWidth: 1,
+    flex: 1,
+    minHeight: 150,
+    justifyContent: 'center',
+    paddingHorizontal: 8,
+    shadowColor: '#122845',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.07,
+    shadowRadius: 12,
+  },
+  quickIconCircle: {
+    alignItems: 'center',
+    backgroundColor: '#f2eee7',
+    borderRadius: 42,
+    height: 76,
+    justifyContent: 'center',
+    marginBottom: 14,
+    width: 76,
+  },
+  quickIcon: {
+    color: '#102846',
+    fontSize: 34,
+    fontWeight: '800',
+  },
+  quickText: {
+    color: '#102846',
+    fontSize: 14,
+    fontWeight: '800',
+    minHeight: 36,
+    textAlign: 'center',
+  },
+  quickUnderline: {
+    backgroundColor: '#d6a247',
+    borderRadius: 2,
+    height: 3,
+    marginTop: 8,
+    width: 40,
+  },
+  greetingCard: {
+    alignItems: 'center',
+    backgroundColor: '#102846',
+    borderRadius: 24,
+    flexDirection: 'row',
+    gap: 22,
+    marginHorizontal: 4,
+    marginTop: 28,
+    minHeight: 120,
+    padding: 22,
+    shadowColor: '#102846',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+  },
+  greetingIconCircle: {
+    alignItems: 'center',
+    backgroundColor: '#223b5d',
+    borderRadius: 42,
+    height: 84,
+    justifyContent: 'center',
+    width: 84,
+  },
+  greetingIcon: {
+    color: '#f0be64',
+    fontSize: 38,
+  },
+  greetingCopy: {
+    flex: 1,
+  },
+  greetingTitle: {
+    color: '#fffdf8',
+    fontSize: 26,
+    fontWeight: '800',
+  },
+  greetingText: {
+    color: '#fffdf8',
+    fontSize: 17,
+    fontWeight: '500',
+    lineHeight: 24,
+    marginTop: 8,
+  },
+  bottomNav: {
+    alignItems: 'center',
+    backgroundColor: '#fffdf8',
+    borderColor: '#eadfce',
+    borderRadius: 24,
+    borderWidth: 1,
+    flexDirection: 'row',
+    height: 94,
+    justifyContent: 'space-around',
+    left: 24,
+    position: 'absolute',
+    right: 24,
+    shadowColor: '#122845',
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.1,
+    shadowRadius: 18,
+  },
+  navItem: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 6,
+  },
+  navIcon: {
+    color: '#8c9198',
+    fontSize: 30,
     fontWeight: '700',
-    letterSpacing: 0,
-    textTransform: 'uppercase',
+  },
+  navIconActive: {
+    color: '#d09a37',
+  },
+  navText: {
+    color: '#767d85',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  navTextActive: {
+    color: '#d09a37',
+  },
+  softPressed: {
+    opacity: 0.75,
   },
   layout: {
     flex: 1,
@@ -603,16 +1337,12 @@ const styles = StyleSheet.create({
     padding: 22,
     width: '34%',
   },
-  appTitle: {
-    color: '#183d36',
-    fontSize: 30,
-    fontWeight: '800',
-  },
-  appSubtitle: {
-    color: '#735f3d',
-    fontSize: 14,
-    fontWeight: '600',
-    marginTop: -8,
+  headerLogo: {
+    alignSelf: 'flex-start',
+    aspectRatio: 1326 / 529,
+    height: 54,
+    marginBottom: 4,
+    maxWidth: '72%',
   },
   controlGroup: {
     rowGap: 8,
